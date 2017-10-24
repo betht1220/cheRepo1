@@ -1,0 +1,183 @@
+# This setting is for INBOUND https into spring-boot embedded tomcate hosting ZbethtranDemoBootOauth2Application
+# https://drissamri.be/blog/java/enable-https-in-spring-boot/
+# or http://nemerosa.ghost.io/2015/07/25/enabling-ssl-with-spring-boot-going-real/
+# command to generate keystore  in /5-bethtran-demo-boot-oauth2/BethDocs/sslCertificate/keystore.p12
+# after that copy the keystore.p12 to project root ie /5-bethtran-demo-boot-oauth2
+# mvn clean package and then right click on main class, run "ZbethtranDemoBootOauth2Application.java" as spring boot app
+# brower = https://localhost:8443/
+# still get error 
+# I/O error on POST request for "https://uaa.bosh-lite.com/oauth/token": sun.security.validator.ValidatorException: 
+# PKIX path building failed: sun.security.provider.certpath.SunCertPathBuilderException: 
+# unable to find valid certification path to requested target
+# https://github.com/spring-guides/tut-spring-security-and-angular-js/issues/122
+# by Dave Syer: The problem is the unsigned certificate. Your web client is barfing on the SSL connection 
+# back to the auth server (first when it tries to get the token, and then later, potentially, 
+# when it tries to get the /user details).
+
+# SSL enabling
+server.ssl.enabled: true
+# INBOUND https ie setting up keystore - https://drissamri.be/blog/java/enable-https-in-spring-boot/
+server.port: 8443
+server.ssl.key-store: keystore.p12 # location must be /5-bethtran-demo-boot-oauth2/keystore.p12
+server.ssl.key-store-password: password
+server.ssl.keyStoreType: PKCS12
+server.ssl.keyAlias: tomcat
+
+# The Oauth2 client after Beth approves the "approval page", the Oauth2 client app will make HTTPS
+# to uaa token endpoint and subsequently uaa's /userinfo 
+# In order to do these two outgoing HTTPS, we must set the following spring commong properties for truststore
+# https://github.com/spring-guides/tut-spring-security-and-angular-js/issues/122
+# dsyer: The problem is the unsigned certificate. Your web client is barfing on the SSL connection back to 
+# the auth server (first when it tries to get the token, and then later, potentially, when it tries to get the /user details).
+# This ZbethtranDemoBootOauth2Application.java needs to do https to uaa to get the token and also get /userinfo
+# so, we need to configure it for outbound https.  It means set up truststore
+# https://docs.spring.io/spring-boot/docs/current/reference/html/common-application-properties.html
+
+# OUTBOUND HTTPS
+#server.ssl.protocol: TLS                      # SSL protocol to use.
+server.ssl.trust-store: uaaTrustStore         # Trust store that holds SSL certificates.
+server.ssl.trust-store-password: password     # Password used to access the trust store.
+# server.ssl.trust-store-provider: beth         # Provider for the trust store.
+#server.ssl.trust-store-type:     PKCS12       # Type of the trust store.
+
+# First, for this app to work
+# must run local VirtualBox hosting BOSH-LITE which run cf and mysql
+# Read this if you cannot "vagrant resume" this bosh-lite virtual box /Users/dragon/Desktop/CANNOT-RESUME-BOSH-LITE.README.txt
+
+# Second, for the Oauth2 to work, you must register an Oauth2 client as in this section of this file
+# section = "USING UAAC to register a client"
+# file = README.build.register-client-app.and-test.txt
+
+# Third, this is spring-boot app running outside of BOSH-LITE virtual box hosting BOSH releases CF and mysql.
+# This spring boot app will use the bosh deployed release CF as Authentication and Authorization server with
+# authorization_code flow
+# After you set up the above two, we have Oauth2 AA servers running (ie CF implements Authorization server and Resource
+# servers https://docs.spring.io/spring-boot/docs/current/reference/html/boot-features-security.html) and you
+# also register an Oauth2 client clientId/clientSecret = "foo-client-id/fooclientsecret" and use this Oauth2 Client
+# in this app's application.yml for configuring Oauth2 security.
+
+# Fourth, to test for the authorization_code flow
+# a. BOSH-LITE CF Bosh release must be running
+# b. right click on the main class "SocialApplication.java", run as spring-boot app
+# c. you'll then ask for the home page of this SocialApplication.java ie the index.html by using
+#    chrome = "http://localhost:8080" 
+#    The authorization_code flow will now in action, after that, this app's index.html will be displayed
+# d. you'll be prompted with login-screen 
+# e. enter admin/admin (the powerful administrator account for this BOSH-LITE CF)
+# f. Authorization Server will validate admin/admin, give authorization code, and the Oauth2 Jar on this spring-boot
+#    app will ask for token, the Authorization server will give the token
+# g. this app's Oauth2 jar will use this token to ask the CF's resource server for this userInfoUri (set below as
+#    "https://uaa.bosh-lite.com/userinfo")
+
+# enable logging
+# issue with Oauth2 is posted here
+# https://lists.cloudfoundry.org/archives/list/cf-dev@lists.cloudfoundry.org/thread/5DP4EVBFUAB3XXVKPAT7WBYUILPOLYQ2/
+# search for LOGGING https://docs.spring.io/spring-boot/docs/current/reference/html/common-application-properties.html
+logging:
+  level:
+    org.springframework.security.oauth2: DEBUG
+    com.example: DEBUG
+security:
+  oauth2:
+    client:
+      clientId: foo-client-id
+      clientSecret: fooclientsecret
+      
+      # BOSH-LITE CF: when "cd ~/workspace/bosh-lite/; vagrant resume"; ./bin/add-route
+      #               cf login -a api.bosh-lite.com -u admin -p admin --skip-ssl-validation 
+      #               or use VirtualBox manager - the vagrant resume is broken with authentication
+      #               then use bosh ssh to get to uaa process and look at log /var/vcap/sys/log/uaa/uaa.log
+      # manage oauth2 clients:
+      #   uaac target uaa.bosh-lite.com; uaac token client get admin -s admin-secret; uaac context; uaac users; uaac clients
+      #   uaac client delete foo-client-id; uaac client add foo-client-id --authorized_grant_types "authorization_code"
+      #       (enter "fooclientsecret" for secret)
+      #   uaac client update foo-client-id --scope "openid,cloud_controller_service_permissions.read,cloud_controller_service_permissions.write"
+      #   uaac client update --authorities "uaa.admin"
+      #   uaac client update foo-client-id --redirect_uri "http://localhost:8080"
+      # NOTES: when I did not add "/oauth/token" and "/oauth/authorize", the approval screen does not come up
+      #        the client "foo-client-id" still does not have redirect-uri property set at this point
+      #        but after logging in with admin/admin, I got error in the browser something like authentication error
+      #        bosh ssh to uaa, and tail /var/vcap/sys/log/uaa/uaa.log shows that
+      #        First, when browser=localhost:8080, bosh ssh to uaa process, and /var/vcap/sys/log/uaa/uaa.log shows
+      #        access is denied, and the login.bosh-lite.com/oauth/authorize is invoked which prompt user for login
+      #        Beth enters admin/admin, and uaa.log shows "Authentication success"
+      #        uaa.log then shows the loading of "approval page" where Beth approves, and after that there is nothing
+      #        related to getting /userinfo in uaa.log
+      #        Beth's attach source to spring-security-oauth2-2.0.13.RELEASE.jar
+      #        ie in project, open Maven Dependencies, find the above jar, right click, maven, download source
+      #        You'll see that the source is attached to this spring security oauth2 jar
+      #        (right click on project, library tab, open maven lib, expand the spring security oauth2 jar, you'll see the source dir
+      #        The error displayed on browser is "Authentication Failed: Could not obtain access token"
+      #        which is in OAuth2ClientAuthenticationProcessingFilter.java of this spring security Oauth2 jar.
+      #        Load in the java class for this class by in the project, open Maven Dependencies, find the
+      #        spring security oauth2, package=client.filter, and double click at the class file 
+      #        OAuth2ClientAuthenticationProcessingFilter.class, the associated source file will be displayed
+      #        Put breakpoint accessToken = restTemplate.getAccessToken();
+      #        Right click on "SocialApplication" debug as spring boot
+      #        
+      #        Now recreate oauth2 client
+      #        pushd /Users/dragon/workspace/bosh-lite-uaac; bosh-lite-uaac-create-oauth2-client.sh
+      #        enter when prompted "fooclientsecret" and "foo-client-id"
+      #       
+      #        Now, we have bosh ssh to uaa and tail -f /var/vcap/sys/log/uaa/uaa.log
+      #        and newly created foo-client-id
+      #        and 5-bethtran-demo-boot-oauth2/ZbethtranDemoBootOauth2Application.java running in debug mode with
+      #        break point set as above
+      #
+      #        Now, browser = localhost:8080
+      #        click at /login link which invoke the Oauth2 security configuration already setup in application.yml
+      #        uaa will deny at first, and display the CF login screen
+      #        Beth to enter admin/admin
+      #        uaa will log "Authentication success"
+      #        and uaa will display "approval page"
+      #        Beth to approve the requested permissions
+      #        After this, uaa will have no error
+      #        But on browser will have error = Authentication Failed: Could not obtain access token
+      #        and breakpoint will show the error is related to SSL configuration to communicate bt
+      #        the UI client ie ZbethtranDemoBootOauth2Application.java and the uaa-server
+      #        debug error: http://www.mkyong.com/webservices/jax-ws/suncertpathbuilderexception-unable-to-find-valid-certification-path-to-requested-target/
+      # 
+      #        It looks like I need to do this: https://drissamri.be/blog/java/enable-https-in-spring-boot/
+      
+      accessTokenUri: https://uaa.bosh-lite.com/oauth/token
+      userAuthorizationUri: https://login.bosh-lite.com/oauth/authorize
+      
+      # PCF-DEV: when "cf dev resume; cf login -a https://api.local.pcfdev.io --skip-ssl-validation; curl api.local.pcfdev.io/info "
+      # accessTokenUri: https://uaa.local.pcfdev.io/oauth/token
+      # userAuthorizationUri: https://uaa.local.pcfdev.io/oauth/authorize
+      
+      # tokenName: oauth_token
+      # authenticationScheme: query
+      # clientAuthenticationScheme: form
+      
+    # spring-boot security: 
+    # https://docs.spring.io/spring-boot/docs/current/reference/html/boot-features-security.html
+    # https://docs.spring.io/spring-boot/docs/current/reference/html/boot-features-security.html#boot-features-security-oauth2-resource-server
+    # look for "security.oauth2.resource.user-info-uri"  
+      
+    # curl api.bosh-lite.com/info
+    # {"name":"","build":"","support":"http://support.cloudfoundry.com","version":0,"description":"",
+    #  "authorization_endpoint":"https://login.bosh-lite.com","token_endpoint":"https://uaa.bosh-lite.com","allow_debug":true}
+
+    # curl api.run.pivotal.io/info
+    # {"name":"","build":"","support":"https://support.run.pivotal.io","version":0,
+    #  "description":"Cloud Foundry sponsored by Pivotal","authorization_endpoint":"https://login.run.pivotal.io",
+    #  "token_endpoint":"https://uaa.run.pivotal.io","allow_debug":true}    
+    
+    # this is "security.oauth2.resource.user-info-uri" in 
+    # https://docs.spring.io/spring-boot/docs/current/reference/html/boot-features-security.html#boot-features-security-oauth2-resource-server
+    
+    # for api.bosh-lite.com, the userInfoUri will be set to <token_endpoint>/userinfo
+    # for api.bosh-lite.com, token_endpoint is obtained by "curl api.bosh-lite.com/info"
+    # for api.bosh-lite.com, userInfoUrl will be set to "https://uaa.bosh-lite.com/userinfo"
+    
+    # the following is for SSO openId
+    # https://docs.spring.io/spring-boot/docs/current/reference/html/boot-features-security.html#boot-features-security-oauth2-single-sign-on
+    resource:  
+      # for facebook.com
+      # userInfoUri: https://graph.facebook.com/me
+      # for api.bosh-lite.com
+      userInfoUri: https://uaa.bosh-lite.com/userinfo
+      # userInfoUri: https://uaa.local.pcfdev.io/userinfo
+
+      
