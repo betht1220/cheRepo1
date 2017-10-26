@@ -1,18 +1,4 @@
-# This setting is for INBOUND https into spring-boot embedded tomcate hosting ZbethtranDemoBootOauth2Application
-# https://drissamri.be/blog/java/enable-https-in-spring-boot/
-# or http://nemerosa.ghost.io/2015/07/25/enabling-ssl-with-spring-boot-going-real/
-# command to generate keystore  in /5-bethtran-demo-boot-oauth2/BethDocs/sslCertificate/keystore.p12
-# after that copy the keystore.p12 to project root ie /5-bethtran-demo-boot-oauth2
-# mvn clean package and then right click on main class, run "ZbethtranDemoBootOauth2Application.java" as spring boot app
-# brower = https://localhost:8443/
-# still get error 
-# I/O error on POST request for "https://uaa.bosh-lite.com/oauth/token": sun.security.validator.ValidatorException: 
-# PKIX path building failed: sun.security.provider.certpath.SunCertPathBuilderException: 
-# unable to find valid certification path to requested target
-# https://github.com/spring-guides/tut-spring-security-and-angular-js/issues/122
-# by Dave Syer: The problem is the unsigned certificate. Your web client is barfing on the SSL connection 
-# back to the auth server (first when it tries to get the token, and then later, potentially, 
-# when it tries to get the /user details).
+
 
 # SSL enabling
 server.ssl.enabled: true
@@ -23,17 +9,7 @@ server.ssl.key-store-password: password
 server.ssl.keyStoreType: PKCS12
 server.ssl.keyAlias: tomcat
 
-# The Oauth2 client after Beth approves the "approval page", the Oauth2 client app will make HTTPS
-# to uaa token endpoint and subsequently uaa's /userinfo 
-# In order to do these two outgoing HTTPS, we must set the following spring commong properties for truststore
-# https://github.com/spring-guides/tut-spring-security-and-angular-js/issues/122
-# dsyer: The problem is the unsigned certificate. Your web client is barfing on the SSL connection back to 
-# the auth server (first when it tries to get the token, and then later, potentially, when it tries to get the /user details).
-# This ZbethtranDemoBootOauth2Application.java needs to do https to uaa to get the token and also get /userinfo
-# so, we need to configure it for outbound https.  It means set up truststore
-# https://docs.spring.io/spring-boot/docs/current/reference/html/common-application-properties.html
 
-# OUTBOUND HTTPS
 #server.ssl.protocol: TLS                      # SSL protocol to use.
 server.ssl.trust-store: uaaTrustStore         # Trust store that holds SSL certificates.
 server.ssl.trust-store-password: password     # Password used to access the trust store.
